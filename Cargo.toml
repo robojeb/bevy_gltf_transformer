@@ -1,0 +1,45 @@
+[package]
+name = "bevy_gltf_transformer"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["bevy_2d", "bevy_3d", "animation"]
+
+# Enables bevy 2D pipeline types
+bevy_2d = ["bevy/bevy_sprite"]
+
+# Enables Bevy 3D pipeline types
+bevy_3d = ["bevy/bevy_pbr", "gltf_pbr", "gltf_lights"]
+
+# Enables glTF PBR extensions
+gltf_pbr = [
+    "gltf/KHR_materials_pbrSpecularGlossiness",
+    "gltf/KHR_materials_transmission",
+    "gltf/KHR_materials_ior",
+    "gltf/KHR_materials_emissive_strength",
+    "gltf/KHR_materials_specular",
+]
+
+# Enables loading of animation data
+animation = ["bevy/animation"]
+
+# Enables glTF light extensions
+gltf_lights = ["gltf/KHR_lights_punctual"]
+
+
+[dependencies]
+serde = "1"
+gltf = { version = "1.4", features = ["extensions", "names", "extras"] }
+thiserror = "1"
+percent-encoding = "2"
+base64 = "0.22"
+#bytes = "1"
+serde_json = "1"
+
+
+[dependencies.bevy]
+version = "0.13"
+default-features = false
+features = ["bevy_render", "bevy_asset", "bevy_scene"]
