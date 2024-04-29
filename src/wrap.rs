@@ -3,6 +3,8 @@
 //!
 //! This wrapper also caches the loaded glTF buffer data.
 pub mod accessor;
+#[cfg(feature = "animation")]
+pub mod animation;
 pub mod buffer;
 #[cfg(feature = "gltf_lights")]
 pub mod light;
