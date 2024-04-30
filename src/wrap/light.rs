@@ -83,16 +83,16 @@ impl<'a> Light<'a> {
     ///
     /// This uses the same conversion as the default Bevy glTF crate.
     #[cfg(feature = "bevy_3d")]
-    pub fn as_bevy_light(&self) -> BevyLight {
+    pub fn as_bevy_light(&self) -> LightKind {
         use bevy::pbr::{DirectionalLight, PointLight, SpotLight};
 
         match self.raw.kind() {
-            Kind::Directional => BevyLight::Directional(DirectionalLight {
+            Kind::Directional => LightKind::Directional(DirectionalLight {
                 color: self.color(),
                 illuminance: self.intensity_bevy(),
                 ..Default::default()
             }),
-            Kind::Point => BevyLight::Point(PointLight {
+            Kind::Point => LightKind::Point(PointLight {
                 color: self.color(),
                 intensity: self.intensity_bevy(),
                 range: self.range().unwrap_or(2.0),
@@ -103,7 +103,7 @@ impl<'a> Light<'a> {
             Kind::Spot {
                 inner_cone_angle,
                 outer_cone_angle,
-            } => BevyLight::Spot(SpotLight {
+            } => LightKind::Spot(SpotLight {
                 color: self.color(),
                 intensity: self.intensity_bevy(),
                 range: self.range().unwrap_or(20.0),
@@ -118,7 +118,7 @@ impl<'a> Light<'a> {
 
 /// One of Bevy's PBR light types
 #[cfg(feature = "bevy_3d")]
-pub enum BevyLight {
+pub enum LightKind {
     /// A directional "sun" light
     Directional(bevy::pbr::DirectionalLight),
     /// A spot light

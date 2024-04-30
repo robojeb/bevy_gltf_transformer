@@ -20,10 +20,19 @@ pub struct Animation<'a> {
 }
 
 impl<'a> Animation<'a> {
+    pub(crate) fn new(doc: Document<'a>, raw: gltf::Animation<'a>) -> Self {
+        Self { doc, raw }
+    }
+
     /// The raw glTF index of this animation
     #[inline(always)]
     pub fn index(&self) -> usize {
         self.raw.index()
+    }
+
+    /// Returns the optional user-defined name
+    pub fn name(&self) -> Option<&'a str> {
+        self.raw.name()
     }
 
     /// An iterator over the animation channels

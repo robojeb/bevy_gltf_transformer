@@ -1,5 +1,8 @@
 //! glTF Asset data that mirrors the defaults provided by `bevy_gltf`
 
+use crate::wrap::camera::Projection;
+#[cfg(feature = "bevy_3d")]
+use crate::wrap::light::LightKind;
 #[cfg(feature = "animation")]
 use bevy::animation::AnimationClip;
 use bevy::{
@@ -106,26 +109,4 @@ where
     pub transform: Transform,
     /// Optional extras for this nodes
     pub extras: Option<GltfExtras>,
-}
-
-/// A Camera projection
-///
-/// The glTF file does not specify if the camera is intended to be 2d or 3d but
-/// the type of projection typically implies its expected use.
-pub enum Projection {
-    /// Orthographic "2D" projection
-    Orthographic(bevy::prelude::OrthographicProjection),
-    /// Perspective "3D" projection
-    Perspective(bevy::prelude::PerspectiveProjection),
-}
-
-/// One of [bevy]s PBR lights
-#[cfg(feature = "bevy_3d")]
-pub enum LightKind {
-    /// A directional "sun" light
-    Directional(bevy::pbr::DirectionalLight),
-    /// A point light
-    Point(bevy::pbr::PointLight),
-    /// A spot light
-    Spot(bevy::pbr::SpotLight),
 }

@@ -6,6 +6,7 @@ pub mod accessor;
 #[cfg(feature = "animation")]
 pub mod animation;
 pub mod buffer;
+pub mod camera;
 #[cfg(feature = "gltf_lights")]
 pub mod light;
 pub mod material;
@@ -13,19 +14,20 @@ pub mod mesh;
 pub mod scene;
 pub mod texture;
 
+use crate::util::Cache;
 use std::sync::OnceLock;
 
 pub use accessor::{Accessor, ElementShape, ElementType, Indices, Values};
+pub use animation::Animation;
 use bevy::utils::HashMap;
 pub use buffer::{Buffer, View};
+pub use camera::Camera;
 #[cfg(feature = "gltf_lights")]
 pub use light::Light;
 pub use material::Material;
 pub use mesh::{Mesh, Primitive};
 pub use scene::{Node, Scene};
 pub use texture::{Image, Sampler, Texture};
-
-use crate::util::Cache;
 
 const URI_ERROR: &str = "URI Contained invalid percent encoding";
 const VALID_MIME_TYPES: &[&str] = &["application/octet-stream", "application/gltf-buffer"];
@@ -123,6 +125,16 @@ impl<'a> Document<'a> {
             .map(|n| Node::new(*self, n))
     }
 
+    /// Returns an [Iterator] over all the animations in this glTF asset.
+    pub fn animations(&self) -> iter::Animations<'a> {
+        iter::Animations::new(*self, self.inner.doc.animations())
+    }
+
+    /// Returns an [Iterator] over all the cameras in this glTF asset.
+    pub fn cameras(&self) -> iter::Cameras<'a> {
+        iter::Cameras::new(*self, self.inner.doc.cameras())
+    }
+
     /// Helper function to compute and cache all the node-paths in the glTF file
     pub(crate) fn node_paths(&self) -> &'a HashMap<usize, Vec<String>> {
         self.inner.paths.get_or_init(|| {
@@ -208,6 +220,8 @@ pub mod iter {
     mk_iter!(Meshes, meshes, Mesh);
     mk_iter!(Nodes, nodes, Node);
     mk_iter!(Scenes, scenes, Scene);
+    mk_iter!(Animations, animations, Animation);
+    mk_iter!(Cameras, cameras, Camera);
 
     use super::Primitive;
 

@@ -58,7 +58,7 @@ pub trait SimpleGltfTransformer: Send + Sync + 'static {
         + serde::Serialize
         + for<'a> serde::Deserialize<'a>;
     /// The type of [error](`std::error::Error`) which could be encountered by this transformer.
-    type Error: Into<Box<dyn std::error::Error + Send + Sync + 'static>>;
+    type Error: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + From<crate::error::Error>;
 
     /// Construct a this loader from settings stored in the [SimpleGltfPlugin]
     fn from_plugin(setttings: &Self::PluginSettings) -> Self;
@@ -274,7 +274,24 @@ where
             scenes.push(handle);
         }
 
-        // TODO: Finish loader
+        #[cfg(feature = "animation")]
+        let (animations, named_animations) = {
+            let mut animations = Vec::with_capacity(document.animations().len());
+            let mut named_animations = HashMap::new();
+
+            for animation in document.animations() {
+                let clip = animation.load_animation_clip(ctx).await?;
+                let handle = ctx.add_labeled_asset(format!("Animation{}", animation.index()), clip);
+
+                if let Some(name) = animation.name() {
+                    named_animations.insert(String::from(name), handle.clone());
+                }
+                animations.push(handle);
+            }
+
+            Ok((animations, named_animations))
+        }?;
+
         Ok(gltf::Gltf {
             default_scene: document
                 .default_scene()
@@ -288,9 +305,9 @@ where
             nodes,
             named_nodes,
             #[cfg(feature = "animation")]
-            animations: Vec::new(),
+            animations,
             #[cfg(feature = "animation")]
-            named_animations: HashMap::new(),
+            named_animations,
         })
     }
 
