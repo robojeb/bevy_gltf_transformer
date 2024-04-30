@@ -260,3 +260,72 @@ impl<'a> Mesh<'a> {
         self.raw.weights()
     }
 }
+
+/// Accessors for reading mesh vertex attributes
+pub mod attributes {
+    use crate::{
+        data::Accessible,
+        wrap::{ElementShape, ElementType},
+    };
+
+    /// Reads accessor data into values for `Mesh::ATTRIBUTE_COLOR`
+    pub struct AttrColor;
+
+    impl Accessible for AttrColor {
+        type Item = [f32; 4];
+
+        fn validate_accessor(shape: crate::wrap::ElementShape) -> bool {
+            matches!(
+                shape,
+                ElementShape::Vec3(ElementType::F32 | ElementType::U16 | ElementType::U8)
+                    | ElementShape::Vec4(ElementType::F32 | ElementType::U16 | ElementType::U8)
+            )
+        }
+
+        fn zero(_shape: ElementShape) -> Self::Item {
+            [0.0; 4]
+        }
+
+        fn from_element(mut elem: crate::data::Element) -> Self::Item {
+            match elem.shape {
+                ElementShape::Vec3(ElementType::F32) => {
+                    [elem.read_f32(), elem.read_f32(), elem.read_f32(), 1.0]
+                }
+                ElementShape::Vec4(ElementType::F32) => [
+                    elem.read_f32(),
+                    elem.read_f32(),
+                    elem.read_f32(),
+                    elem.read_f32(),
+                ],
+
+                ElementShape::Vec3(ElementType::U8) => [
+                    elem.read_u8() as f32 / 255.0,
+                    elem.read_u8() as f32 / 255.0,
+                    elem.read_u8() as f32 / 255.0,
+                    1.0,
+                ],
+                ElementShape::Vec4(ElementType::U8) => [
+                    elem.read_u8() as f32 / 255.0,
+                    elem.read_u8() as f32 / 255.0,
+                    elem.read_u8() as f32 / 255.0,
+                    elem.read_u8() as f32 / 255.0,
+                ],
+
+                ElementShape::Vec3(ElementType::U16) => [
+                    elem.read_u16() as f32 / 65535.0,
+                    elem.read_u16() as f32 / 65535.0,
+                    elem.read_u16() as f32 / 65535.0,
+                    1.0,
+                ],
+                ElementShape::Vec4(ElementType::U16) => [
+                    elem.read_u16() as f32 / 65535.0,
+                    elem.read_u16() as f32 / 65535.0,
+                    elem.read_u16() as f32 / 65535.0,
+                    elem.read_u16() as f32 / 65535.0,
+                ],
+
+                _ => unreachable!(),
+            }
+        }
+    }
+}
