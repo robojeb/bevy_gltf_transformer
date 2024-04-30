@@ -1,5 +1,6 @@
 //! Types and traits for conversion from glTF accessor types to rust types
-use crate::wrap::ElementShape;
+use crate::wrap::{ElementShape, ElementType};
+use bevy::math::{Quat, Vec3};
 use gltf::accessor::{DataType, Dimensions};
 
 /// A raw element from an accessor with its byte data and associated expected
@@ -27,9 +28,11 @@ impl<'a> Element<'a> {
 
     /// Consume a [u16] from the [Element]
     pub fn read_u16(&mut self) -> u16 {
-        let data = [self.data[0], self.data[1]];
-        self.data = &self.data[2..];
-        u16::from_le_bytes(data)
+        let Some((out, data)) = self.data.split_first_chunk() else {
+            unreachable!()
+        };
+        self.data = data;
+        u16::from_le_bytes(*out)
     }
 
     /// Consume an [i16] from the [Element]
@@ -39,16 +42,20 @@ impl<'a> Element<'a> {
 
     /// Consume a [u32] from the [Element]
     pub fn read_u32(&mut self) -> u32 {
-        let data = [self.data[0], self.data[1], self.data[2], self.data[3]];
-        self.data = &self.data[4..];
-        u32::from_le_bytes(data)
+        let Some((out, data)) = self.data.split_first_chunk() else {
+            unreachable!()
+        };
+        self.data = data;
+        u32::from_le_bytes(*out)
     }
 
     /// Consume an [f32] from the [Element]
     pub fn read_f32(&mut self) -> f32 {
-        let data = [self.data[0], self.data[1], self.data[2], self.data[3]];
-        self.data = &self.data[4..];
-        f32::from_le_bytes(data)
+        let Some((out, data)) = self.data.split_first_chunk() else {
+            unreachable!()
+        };
+        self.data = data;
+        f32::from_le_bytes(*out)
     }
 }
 
@@ -254,5 +261,46 @@ impl<T: AccessorData> AccessorShape for [[T; 4]; 4] {
             [T::get(data), T::get(data), T::get(data), T::get(data)],
             [T::get(data), T::get(data), T::get(data), T::get(data)],
         ]
+    }
+}
+
+impl Accessible for Vec3 {
+    type Item = Vec3;
+
+    fn from_element(mut elem: Element) -> Self::Item {
+        Vec3 {
+            x: elem.read_f32(),
+            y: elem.read_f32(),
+            z: elem.read_f32(),
+        }
+    }
+
+    fn zero(_shape: ElementShape) -> Self::Item {
+        Vec3::ZERO
+    }
+
+    fn validate_accessor(shape: ElementShape) -> bool {
+        matches!(shape, ElementShape::Vec3(ElementType::F32))
+    }
+}
+
+impl Accessible for Quat {
+    type Item = Quat;
+
+    fn from_element(mut elem: Element) -> Self::Item {
+        Quat::from_xyzw(
+            elem.read_f32(),
+            elem.read_f32(),
+            elem.read_f32(),
+            elem.read_f32(),
+        )
+    }
+
+    fn zero(_shape: ElementShape) -> Self::Item {
+        Quat::IDENTITY
+    }
+
+    fn validate_accessor(shape: ElementShape) -> bool {
+        matches!(shape, ElementShape::Vec4(ElementType::F32))
     }
 }
