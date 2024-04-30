@@ -12,7 +12,7 @@ use std::marker::PhantomData;
 /// Dense accessor data
 pub struct DenseData<'a, T> {
     /// Accessor meta-data
-    meta: Meta,
+    pub(crate) meta: Meta,
     /// Buffer data-view
     view: &'a [u8],
     /// Type info
@@ -132,7 +132,7 @@ where
     }
 
     /// Iterate over all the elements in this accessor
-    pub fn iter(&self) -> DenseDataIter<T> {
+    pub fn iter(&self) -> DenseDataIter<'a, T> {
         DenseDataIter::new(self)
     }
 
@@ -149,15 +149,15 @@ where
 /// Iterator over densly packed accessor data
 pub struct DenseDataIter<'a, T> {
     counter: usize,
-    accessor: &'a DenseData<'a, T>,
+    pub(crate) accessor: DenseData<'a, T>,
 }
 
 impl<'a, T> DenseDataIter<'a, T> {
     /// Create a new iterator from [DenseData]
-    pub fn new(accessor: &'a DenseData<T>) -> Self {
+    pub fn new(accessor: &DenseData<'a, T>) -> Self {
         Self {
             counter: 0,
-            accessor,
+            accessor: *accessor,
         }
     }
 }
@@ -176,5 +176,18 @@ where
         } else {
             None
         }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.len(), Some(self.len()))
+    }
+}
+
+impl<'a, T> ExactSizeIterator for DenseDataIter<'a, T>
+where
+    T: Accessible,
+{
+    fn len(&self) -> usize {
+        self.accessor.meta.count - self.counter
     }
 }

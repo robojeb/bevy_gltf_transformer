@@ -5,6 +5,7 @@ use super::BufferId;
 use bevy::utils::hashbrown::HashMap;
 
 pub(crate) mod data_uri;
+pub mod norm;
 
 /// Cache for loaded glTF buffers
 pub struct Cache {

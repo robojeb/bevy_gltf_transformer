@@ -53,7 +53,7 @@ impl<'a> Accessor<'a> {
 
     /// Load the data for this accessor with a transformation to the specified
     /// rust type `T`
-    pub async fn load<T: Accessible>(&self, ctx: &mut LoadContext<'_>) -> Result<Data<T>> {
+    pub async fn load<T: Accessible>(&self, ctx: &mut LoadContext<'_>) -> Result<Data<'a, T>> {
         self.load_untyped(ctx).await?.try_with_type()
     }
 
