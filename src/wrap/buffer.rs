@@ -34,7 +34,7 @@ impl<'a> Buffer<'a> {
             Source::Uri(_) => BufferId::Buffer(self.raw.index()),
         };
 
-        match self.doc.cache.get(id) {
+        match self.doc.inner.cache.get(id) {
             Some(buf) => Ok(buf),
             None => {
                 let Source::Uri(uri) = self.raw.source() else {
@@ -58,7 +58,7 @@ impl<'a> Buffer<'a> {
                 };
 
                 let cached = buffer_bytes.into_boxed_slice();
-                Ok(self.doc.cache.store(id, cached))
+                Ok(self.doc.inner.cache.store(id, cached))
             }
         }
     }

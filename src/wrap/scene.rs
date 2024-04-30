@@ -85,6 +85,17 @@ impl<'a> Node<'a> {
         Self { doc, raw }
     }
 
+    /// Returns the optional user provided name for this [Node]
+    #[inline(always)]
+    pub fn name(&self) -> Option<&'a str> {
+        self.raw.name()
+    }
+
+    /// Returns the named path of this [Node]
+    pub fn path(&self) -> &[String] {
+        self.doc.node_paths().get(&self.index()).unwrap()
+    }
+
     /// The raw glTF index of this [Node]
     #[inline(always)]
     pub fn index(&self) -> usize {
