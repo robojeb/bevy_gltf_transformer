@@ -1,6 +1,6 @@
 //! Types and traits for conversion from glTF accessor types to rust types
 use crate::wrap::{ElementShape, ElementType};
-use bevy::math::{Quat, Vec3};
+use bevy::math::{Mat2, Mat3, Mat3A, Mat4, Quat, Vec2, Vec3, Vec3A, Vec4};
 use gltf::accessor::{DataType, Dimensions};
 
 /// A raw element from an accessor with its byte data and associated expected
@@ -264,6 +264,25 @@ impl<T: AccessorData> AccessorShape for [[T; 4]; 4] {
     }
 }
 
+impl Accessible for Vec2 {
+    type Item = Vec2;
+
+    fn from_element(mut elem: Element) -> Self::Item {
+        Vec2 {
+            x: elem.read_f32(),
+            y: elem.read_f32(),
+        }
+    }
+
+    fn zero(_shape: ElementShape) -> Self::Item {
+        Vec2::ZERO
+    }
+
+    fn validate_accessor(shape: ElementShape) -> bool {
+        matches!(shape, ElementShape::Vec2(ElementType::F32))
+    }
+}
+
 impl Accessible for Vec3 {
     type Item = Vec3;
 
@@ -277,6 +296,22 @@ impl Accessible for Vec3 {
 
     fn zero(_shape: ElementShape) -> Self::Item {
         Vec3::ZERO
+    }
+
+    fn validate_accessor(shape: ElementShape) -> bool {
+        matches!(shape, ElementShape::Vec3(ElementType::F32))
+    }
+}
+
+impl Accessible for Vec3A {
+    type Item = Vec3A;
+
+    fn from_element(mut elem: Element) -> Self::Item {
+        Vec3A::new(elem.read_f32(), elem.read_f32(), elem.read_f32())
+    }
+
+    fn zero(_shape: ElementShape) -> Self::Item {
+        Vec3A::ZERO
     }
 
     fn validate_accessor(shape: ElementShape) -> bool {
@@ -302,5 +337,123 @@ impl Accessible for Quat {
 
     fn validate_accessor(shape: ElementShape) -> bool {
         matches!(shape, ElementShape::Vec4(ElementType::F32))
+    }
+}
+
+impl Accessible for Mat2 {
+    type Item = Mat2;
+
+    fn from_element(mut elem: Element) -> Self::Item {
+        Mat2::from_cols(
+            Vec2 {
+                x: elem.read_f32(),
+                y: elem.read_f32(),
+            },
+            Vec2 {
+                x: elem.read_f32(),
+                y: elem.read_f32(),
+            },
+        )
+    }
+
+    fn zero(_shape: ElementShape) -> Self::Item {
+        Mat2::ZERO
+    }
+
+    fn validate_accessor(shape: ElementShape) -> bool {
+        matches!(shape, ElementShape::Mat2(ElementType::F32))
+    }
+}
+
+impl Accessible for Mat3 {
+    type Item = Mat3;
+
+    fn from_element(mut elem: Element) -> Self::Item {
+        Mat3::from_cols(
+            Vec3 {
+                x: elem.read_f32(),
+                y: elem.read_f32(),
+                z: elem.read_f32(),
+            },
+            Vec3 {
+                x: elem.read_f32(),
+                y: elem.read_f32(),
+                z: elem.read_f32(),
+            },
+            Vec3 {
+                x: elem.read_f32(),
+                y: elem.read_f32(),
+                z: elem.read_f32(),
+            },
+        )
+    }
+
+    fn zero(_shape: ElementShape) -> Self::Item {
+        Mat3::ZERO
+    }
+
+    fn validate_accessor(shape: ElementShape) -> bool {
+        matches!(shape, ElementShape::Mat3(ElementType::F32))
+    }
+}
+
+impl Accessible for Mat3A {
+    type Item = Mat3A;
+
+    fn from_element(mut elem: Element) -> Self::Item {
+        Mat3A::from_cols(
+            Vec3A::new(elem.read_f32(), elem.read_f32(), elem.read_f32()),
+            Vec3A::new(elem.read_f32(), elem.read_f32(), elem.read_f32()),
+            Vec3A::new(elem.read_f32(), elem.read_f32(), elem.read_f32()),
+        )
+    }
+
+    fn zero(_shape: ElementShape) -> Self::Item {
+        Mat3A::ZERO
+    }
+
+    fn validate_accessor(shape: ElementShape) -> bool {
+        matches!(shape, ElementShape::Mat3(ElementType::F32))
+    }
+}
+
+impl Accessible for Mat4 {
+    type Item = Mat4;
+
+    fn from_element(mut elem: Element) -> Self::Item {
+        Mat4::from_cols(
+            Vec4::new(
+                elem.read_f32(),
+                elem.read_f32(),
+                elem.read_f32(),
+                elem.read_f32(),
+            ),
+            Vec4::new(
+                elem.read_f32(),
+                elem.read_f32(),
+                elem.read_f32(),
+                elem.read_f32(),
+            ),
+            Vec4::new(
+                elem.read_f32(),
+                elem.read_f32(),
+                elem.read_f32(),
+                elem.read_f32(),
+            ),
+            Vec4::new(
+                elem.read_f32(),
+                elem.read_f32(),
+                elem.read_f32(),
+                elem.read_f32(),
+            ),
+        )
+    }
+
+    fn zero(_shape: ElementShape) -> Self::Item {
+        Mat4::ZERO
+    }
+
+    fn validate_accessor(shape: ElementShape) -> bool {
+        matches!(shape, ElementShape::Mat4(ElementType::F32))
     }
 }
