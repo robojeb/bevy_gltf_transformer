@@ -12,6 +12,7 @@ pub mod light;
 pub mod material;
 pub mod mesh;
 pub mod scene;
+pub mod skins;
 pub mod texture;
 
 use crate::util::Cache;
@@ -27,6 +28,7 @@ pub use light::Light;
 pub use material::Material;
 pub use mesh::{Mesh, Primitive};
 pub use scene::{Node, Scene};
+pub use skins::Skin;
 pub use texture::{Image, Sampler, Texture};
 
 const URI_ERROR: &str = "URI Contained invalid percent encoding";
@@ -135,6 +137,11 @@ impl<'a> Document<'a> {
         iter::Cameras::new(*self, self.inner.doc.cameras())
     }
 
+    /// Returns an [Iterator] over all the skins in this glTF asset.
+    pub fn skins(&self) -> iter::Skins<'a> {
+        iter::Skins::new(*self, self.inner.doc.skins())
+    }
+
     /// Helper function to compute and cache all the node-paths in the glTF file
     pub(crate) fn node_paths(&self) -> &'a HashMap<usize, Vec<String>> {
         self.inner.paths.get_or_init(|| {
@@ -222,6 +229,7 @@ pub mod iter {
     mk_iter!(Scenes, scenes, Scene);
     mk_iter!(Animations, animations, Animation);
     mk_iter!(Cameras, cameras, Camera);
+    mk_iter!(Skins, skins, Skin);
 
     use super::Primitive;
 
