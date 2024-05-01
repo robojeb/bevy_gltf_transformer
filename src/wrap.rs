@@ -6,6 +6,7 @@ pub mod accessor;
 #[cfg(feature = "animation")]
 pub mod animation;
 pub mod buffer;
+pub mod camera;
 #[cfg(feature = "gltf_lights")]
 pub mod light;
 pub mod material;
@@ -13,16 +14,20 @@ pub mod mesh;
 pub mod scene;
 pub mod texture;
 
+use crate::util::Cache;
+use std::sync::OnceLock;
+
 pub use accessor::{Accessor, ElementShape, ElementType, Indices, Values};
+pub use animation::Animation;
+use bevy::utils::HashMap;
 pub use buffer::{Buffer, View};
+pub use camera::Camera;
 #[cfg(feature = "gltf_lights")]
 pub use light::Light;
 pub use material::Material;
 pub use mesh::{Mesh, Primitive};
 pub use scene::{Node, Scene};
 pub use texture::{Image, Sampler, Texture};
-
-use crate::util::Cache;
 
 const URI_ERROR: &str = "URI Contained invalid percent encoding";
 const VALID_MIME_TYPES: &[&str] = &["application/octet-stream", "application/gltf-buffer"];
@@ -40,75 +45,133 @@ pub(crate) enum BufferId {
 /// Bevy types and keeps an internal cache of the loaded [Buffer] data.
 #[derive(Clone, Copy)]
 pub struct Document<'a> {
-    pub(crate) doc: &'a gltf::Document,
-    pub(crate) cache: &'a Cache,
+    pub(crate) inner: &'a DocInner,
+}
+
+pub(crate) struct DocInner {
+    pub(crate) doc: gltf::Document,
+    pub(crate) cache: Cache,
+    pub(crate) paths: OnceLock<HashMap<usize, Vec<String>>>,
 }
 
 impl<'a> Document<'a> {
     /// Returns the optionally defined default [Scene] for this glTF asset.
     pub fn default_scene(&self) -> Option<Scene<'a>> {
-        self.doc.default_scene().map(|s| Scene::new(*self, s))
+        self.inner.doc.default_scene().map(|s| Scene::new(*self, s))
     }
 
     /// Returns an [Iterator] that visits the buffers of the glTF asset.
     pub fn buffers(&self) -> iter::Buffers<'a> {
-        iter::Buffers::new(*self, self.doc.buffers())
+        iter::Buffers::new(*self, self.inner.doc.buffers())
     }
 
     /// Returns an [Iterator] that visits the buffer views of the glTF asset.
     pub fn views(&self) -> iter::Views<'a> {
-        iter::Views::new(*self, self.doc.views())
+        iter::Views::new(*self, self.inner.doc.views())
     }
 
     /// Returns an [Iterator] that visits the accessors of the glTF asset.
     pub fn accessors(&self) -> iter::Accessors<'a> {
-        iter::Accessors::new(*self, self.doc.accessors())
+        iter::Accessors::new(*self, self.inner.doc.accessors())
     }
 
     /// Returns an [Iterator] that visits the materials of the glTF asset.
     pub fn materials(&self) -> iter::Materials<'a> {
-        iter::Materials::new(*self, self.doc.materials())
+        iter::Materials::new(*self, self.inner.doc.materials())
     }
 
     /// Returns an [Iterator] over the images of the glTF asset.
     pub fn images(&self) -> iter::Images<'a> {
-        iter::Images::new(*self, self.doc.images())
+        iter::Images::new(*self, self.inner.doc.images())
     }
 
     /// Returns an [Iterator] over the textures of the glTF asset.
     pub fn textures(&self) -> iter::Textures<'a> {
-        iter::Textures::new(*self, self.doc.textures())
+        iter::Textures::new(*self, self.inner.doc.textures())
     }
 
     /// Returns an [Iterator] over all of the samplers of this glTF asset.
     pub fn samplers(&self) -> iter::Samplers<'a> {
-        iter::Samplers::new(*self, self.doc.samplers())
+        iter::Samplers::new(*self, self.inner.doc.samplers())
     }
 
     /// Returns an [Iterator] over all of the meshes of this glTF asset.
     pub fn meshes(&self) -> iter::Meshes<'a> {
-        iter::Meshes::new(*self, self.doc.meshes())
+        iter::Meshes::new(*self, self.inner.doc.meshes())
     }
 
     /// Returns an [Iterator] over all of the lights in tihs glTF asset.
     #[cfg(feature = "gltf_lights")]
     pub fn lights(&self) -> iter::Lights<'a> {
-        iter::Lights::new(*self, self.doc.lights().into_iter().flatten())
+        iter::Lights::new(*self, self.inner.doc.lights().into_iter().flatten())
     }
 
     /// Returns an [Iterator] over all the scenes in this glTF asset.
     pub fn scenes(&self) -> iter::Scenes<'a> {
-        iter::Scenes::new(*self, self.doc.scenes())
+        iter::Scenes::new(*self, self.inner.doc.scenes())
     }
 
     /// Returns an [Iterator] over all of the nodes in this glTF asset.
     pub fn nodes(&self) -> iter::Nodes<'a> {
-        iter::Nodes::new(*self, self.doc.nodes())
+        iter::Nodes::new(*self, self.inner.doc.nodes())
     }
 
     /// Get a [Node] by its reported index
     pub fn get_node(&self, index: usize) -> Option<Node<'a>> {
-        self.doc.nodes().nth(index).map(|n| Node::new(*self, n))
+        self.inner
+            .doc
+            .nodes()
+            .nth(index)
+            .map(|n| Node::new(*self, n))
+    }
+
+    /// Returns an [Iterator] over all the animations in this glTF asset.
+    pub fn animations(&self) -> iter::Animations<'a> {
+        iter::Animations::new(*self, self.inner.doc.animations())
+    }
+
+    /// Returns an [Iterator] over all the cameras in this glTF asset.
+    pub fn cameras(&self) -> iter::Cameras<'a> {
+        iter::Cameras::new(*self, self.inner.doc.cameras())
+    }
+
+    /// Helper function to compute and cache all the node-paths in the glTF file
+    pub(crate) fn node_paths(&self) -> &'a HashMap<usize, Vec<String>> {
+        self.inner.paths.get_or_init(|| {
+            use scene::traversal::{DepthFirst, Traversal};
+
+            // Get all the roots in all scenes
+            let roots = self
+                .inner
+                .doc
+                .scenes()
+                .flat_map(|s| s.nodes())
+                .map(|n| Node::new(*self, n));
+
+            // Output map
+            let mut paths = HashMap::with_capacity(self.inner.doc.nodes().len());
+
+            // Construct all the node paths in reverse order
+            for node in DepthFirst::new(*self, roots, ()) {
+                let name = node
+                    .name()
+                    .map(String::from)
+                    .unwrap_or_else(|| format!("Node{}", node.index()));
+
+                // Insert self into map
+                paths.insert(node.index(), vec![name.clone()]);
+
+                // Add our name to all children
+                for child in node.children() {
+                    paths.get_mut(&child.index()).unwrap().push(name.clone());
+                }
+            }
+
+            // Reverse all the path ordering
+            paths.values_mut().for_each(|path| path.reverse());
+
+            paths
+        })
     }
 }
 
@@ -157,6 +220,8 @@ pub mod iter {
     mk_iter!(Meshes, meshes, Mesh);
     mk_iter!(Nodes, nodes, Node);
     mk_iter!(Scenes, scenes, Scene);
+    mk_iter!(Animations, animations, Animation);
+    mk_iter!(Cameras, cameras, Camera);
 
     use super::Primitive;
 

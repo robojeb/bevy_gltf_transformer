@@ -104,8 +104,11 @@ pub mod simple;
 mod util;
 pub mod wrap;
 
-use bevy::asset::{AssetLoader, AsyncReadExt, LoadContext};
-use std::{borrow::Cow, future::Future};
+use bevy::{
+    asset::{AssetLoader, AsyncReadExt, LoadContext},
+    utils::HashMap,
+};
+use std::{borrow::Cow, future::Future, sync::OnceLock};
 use util::{Cache, OwningSlice};
 use wrap::{BufferId, Document};
 
@@ -206,10 +209,15 @@ async fn load_gltf<'a, T: GltfTransformer>(
         util::Cache::empty()
     };
 
-    let doc = wrap::Document {
-        doc: &document,
-        cache: &cache,
+    let paths: OnceLock<HashMap<usize, Vec<String>>> = OnceLock::new();
+
+    let inner = wrap::DocInner {
+        doc: document,
+        cache,
+        paths,
     };
+
+    let doc = wrap::Document { inner: &inner };
 
     T::load(t, doc, settings, load_context).await
 }

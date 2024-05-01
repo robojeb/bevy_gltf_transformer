@@ -70,4 +70,8 @@ pub enum Error {
         /// The actual accessor dimensions
         dim: Dimensions,
     },
+    /// Could not determine the vertex count of a primitive because it didn't
+    /// have Position, Normal, or Tangent information
+    #[error("could not determine primitive vertex count")]
+    PrimitiveVertexCount,
 }

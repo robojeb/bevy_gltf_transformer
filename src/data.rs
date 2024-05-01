@@ -98,7 +98,7 @@ where
     }
 
     /// Get an iterator over all the elements in the data stream
-    pub fn iter(&self) -> DataIter<T> {
+    pub fn iter(&self) -> DataIter<'a, T> {
         match self {
             Self::Dense(d) => DataIter::Dense(d.iter()),
             Self::Sparse(s) => DataIter::Sparse(s.iter()),
@@ -121,10 +121,20 @@ where
     type Item = T::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::Dense(d) => d.next(),
-            Self::Sparse(d) => d.next(),
-        }
+        each!(self.next())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.len(), Some(self.len()))
+    }
+}
+
+impl<'a, T> ExactSizeIterator for DataIter<'a, T>
+where
+    T: Accessible,
+{
+    fn len(&self) -> usize {
+        each!(self.len())
     }
 }
 

@@ -128,10 +128,10 @@ where
     }
 
     /// Get an iterator over the elements of a [SparseData] structure
-    pub fn iter(&self) -> SparseDataIter<T> {
+    pub fn iter(&self) -> SparseDataIter<'a, T> {
         SparseDataIter {
             counter: 0,
-            meta: &self.meta,
+            meta: self.meta,
             replace: self.indices.iter().zip(self.values.iter()).peekable(),
             base: self.base.as_ref().map(|b| b.iter()),
         }
@@ -141,7 +141,7 @@ where
 /// An iterator over sparse accessor data
 pub struct SparseDataIter<'a, T: Accessible> {
     counter: usize,
-    meta: &'a Meta,
+    meta: Meta,
     replace: Peekable<Zip<IndexIter<'a>, DenseDataIter<'a, T>>>,
     base: Option<DenseDataIter<'a, T>>,
 }
@@ -170,6 +170,19 @@ where
                 }
             }
         }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.len(), Some(self.len()))
+    }
+}
+
+impl<'a, T> ExactSizeIterator for SparseDataIter<'a, T>
+where
+    T: Accessible,
+{
+    fn len(&self) -> usize {
+        self.meta.count - self.counter
     }
 }
 
@@ -237,17 +250,17 @@ impl<'a> IndexData<'a> {
         }
     }
 
-    fn iter(&self) -> IndexIter {
+    fn iter(&self) -> IndexIter<'a> {
         IndexIter {
             counter: 0,
-            indices: self,
+            indices: *self,
         }
     }
 }
 
 struct IndexIter<'a> {
     counter: usize,
-    indices: &'a IndexData<'a>,
+    indices: IndexData<'a>,
 }
 
 impl<'a> Iterator for IndexIter<'a> {
