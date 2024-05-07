@@ -29,7 +29,7 @@ impl<'a> Element<'a> {
     /// Consume a [u16] from the [Element]
     pub fn read_u16(&mut self) -> u16 {
         let Some((out, data)) = self.data.split_first_chunk() else {
-            unreachable!()
+            panic!("Not enough bytes to read u16")
         };
         self.data = data;
         u16::from_le_bytes(*out)
@@ -43,7 +43,7 @@ impl<'a> Element<'a> {
     /// Consume a [u32] from the [Element]
     pub fn read_u32(&mut self) -> u32 {
         let Some((out, data)) = self.data.split_first_chunk() else {
-            unreachable!()
+            panic!("Not enough bytes to read u32")
         };
         self.data = data;
         u32::from_le_bytes(*out)
@@ -52,7 +52,7 @@ impl<'a> Element<'a> {
     /// Consume an [f32] from the [Element]
     pub fn read_f32(&mut self) -> f32 {
         let Some((out, data)) = self.data.split_first_chunk() else {
-            unreachable!()
+            panic!("Not enough bytes to read f32")
         };
         self.data = data;
         f32::from_le_bytes(*out)
