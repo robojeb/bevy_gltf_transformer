@@ -32,7 +32,29 @@ impl<'a> Camera<'a> {
                 Projection::Orthographic(bevy::prelude::OrthographicProjection {
                     near: ortho.znear(),
                     far: ortho.zfar(),
-                    ..Default::default()
+                    ..bevy::prelude::OrthographicProjection::default_3d()
+                })
+            }
+            gltf::camera::Projection::Perspective(persp) => {
+                Projection::Perspective(bevy::prelude::PerspectiveProjection {
+                    fov: persp.yfov(),
+                    aspect_ratio: persp.aspect_ratio().unwrap_or(1.0),
+                    near: persp.znear(),
+                    far: persp.zfar().unwrap_or(1000.0),
+                })
+            }
+        }
+    }
+
+    /// Returns the camera projection as a bevy projection component, defaults
+    /// orthographic cameras to the Bevy 2D default.
+    pub fn projection_2d(&self) -> Projection {
+        match self.raw.projection() {
+            gltf::camera::Projection::Orthographic(ortho) => {
+                Projection::Orthographic(bevy::prelude::OrthographicProjection {
+                    near: ortho.znear(),
+                    far: ortho.zfar(),
+                    ..bevy::prelude::OrthographicProjection::default_2d()
                 })
             }
             gltf::camera::Projection::Perspective(persp) => {

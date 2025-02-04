@@ -7,7 +7,7 @@ use self::traversal::Traversal;
 use super::Document;
 #[cfg(feature = "gltf_lights")]
 use super::Light;
-use bevy::{math::Mat4, transform::components::Transform};
+use bevy::{core::Name, math::Mat4, transform::components::Transform};
 use serde_json::{value::RawValue, Value};
 
 /// A glTF scene which defines the root of one or more [Node] trees
@@ -92,8 +92,8 @@ impl<'a> Node<'a> {
     }
 
     /// Returns the named path of this [Node]
-    pub fn path(&self) -> &[String] {
-        self.doc.node_paths().get(&self.index()).unwrap()
+    pub fn path(&self) -> &[Name] {
+        &self.doc.node_paths().get(&self.index()).unwrap().1
     }
 
     /// The raw glTF index of this [Node]
@@ -116,7 +116,7 @@ impl<'a> Node<'a> {
     }
 
     /// Returns an iterator over the children of this [Node]
-    pub fn children(&self) -> Children {
+    pub fn children(&self) -> Children<'a> {
         Children(self.doc, self.raw.children())
     }
 
@@ -153,7 +153,7 @@ impl<'a> Iterator for RootNodes<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for RootNodes<'a> {
+impl ExactSizeIterator for RootNodes<'_> {
     fn len(&self) -> usize {
         self.1.len()
     }
@@ -170,7 +170,7 @@ impl<'a> Iterator for Children<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for Children<'a> {
+impl ExactSizeIterator for Children<'_> {
     fn len(&self) -> usize {
         self.1.len()
     }

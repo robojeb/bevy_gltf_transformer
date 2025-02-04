@@ -5,7 +5,7 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-default = ["bevy_2d", "bevy_3d", "animation"]
+default = ["bevy_2d", "bevy_3d", "animation", "common_image_formats"]
 
 # Enables bevy 2D pipeline types
 bevy_2d = ["bevy/bevy_sprite"]
@@ -22,6 +22,29 @@ gltf_pbr = [
     "gltf/KHR_materials_specular",
 ]
 
+# Perform extra validations of the GLTF data, such as:
+# * Confirming limits on f32 data in accessors
+gltf_validations = []
+
+common_image_formats = ["png", "jpeg", "qoi", "pnm"]
+
+basis-universal = ["bevy/basis-universal"]
+bmp = ["bevy/bmp"]
+dds = ["bevy/dds"]
+ff = ["bevy/ff"]
+gif = ["bevy/gif"]
+exr = ["bevy/exr"]
+hdr = ["bevy/hdr"]
+ico = ["bevy/ico"]
+jpeg = ["bevy/jpeg"]
+ktx2 = ["bevy/ktx2"]
+png = ["bevy/png"]
+pnm = ["bevy/pnm"]
+qoi = ["bevy/qoi"]
+tga = ["bevy/tga"]
+tiff = ["bevy/tiff"]
+webp = ["bevy/webp"]
+
 # Enables loading of animation data
 animation = ["bevy/animation"]
 
@@ -32,7 +55,7 @@ gltf_lights = ["gltf/KHR_lights_punctual"]
 [dependencies]
 serde = "1"
 gltf = { version = "1.4", features = ["extensions", "names", "extras"] }
-thiserror = "1"
+thiserror = "2"
 percent-encoding = "2"
 base64 = "0.22"
 #bytes = "1"
@@ -40,6 +63,6 @@ serde_json = "1"
 
 
 [dependencies.bevy]
-version = "0.13"
+version = "0.15"
 default-features = false
 features = ["bevy_render", "bevy_asset", "bevy_scene"]

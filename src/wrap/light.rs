@@ -1,7 +1,7 @@
 //! Structures for glTF lights from the `KHR_lights_punctual` extension
 //!
 use super::Document;
-use bevy::render::color::Color;
+use bevy::color::Color;
 use gltf::khr_lights_punctual::Kind;
 use serde_json::value::RawValue;
 
@@ -20,7 +20,7 @@ impl<'a> Light<'a> {
     ///
     /// This assumes the color is in the sRGB color-space.
     pub fn color(&self) -> Color {
-        Color::rgb_from_array(self.raw.color())
+        Color::srgb_from_array(self.raw.color())
     }
 
     /// The internal glTF index

@@ -1,5 +1,5 @@
 //! Structures for glTF material definitions
-use bevy::render::color::Color;
+use bevy::color::Color;
 use serde_json::{value::RawValue, Value};
 
 use super::Document;
@@ -79,7 +79,12 @@ impl<'a> Material<'a> {
     /// The default value is [Color::WHITE].
     pub fn base_color(&self) -> Color {
         let pbr = self.raw.pbr_metallic_roughness();
-        Color::rgba_from_array(pbr.base_color_factor())
+        Color::srgba(
+            pbr.base_color_factor()[0],
+            pbr.base_color_factor()[1],
+            pbr.base_color_factor()[2],
+            pbr.base_color_factor()[3],
+        )
     }
 
     /// Returns the metalness factor of the material.

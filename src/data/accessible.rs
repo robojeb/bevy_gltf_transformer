@@ -13,7 +13,7 @@ pub struct Element<'a> {
     pub shape: ElementShape,
 }
 
-impl<'a> Element<'a> {
+impl Element<'_> {
     /// Consume a [u8] from the [Element]
     pub fn read_u8(&mut self) -> u8 {
         let out = self.data[0];
@@ -55,7 +55,18 @@ impl<'a> Element<'a> {
             panic!("Not enough bytes to read f32")
         };
         self.data = data;
-        f32::from_le_bytes(*out)
+        #[cfg(any(debug_assertions, feature = "gltf_validations"))]
+        {
+            let out = f32::from_le_bytes(*out);
+            if out.is_infinite() || out.is_nan() {
+                bevy::log::warn_once!("Accessor contains Infinite or NaN f32 value");
+            }
+            out
+        }
+        #[cfg(not(any(debug_assertions, feature = "gltf_validations")))]
+        {
+            f32::from_le_bytes(*out)
+        }
     }
 }
 
@@ -316,6 +327,27 @@ impl Accessible for Vec3A {
 
     fn validate_accessor(shape: ElementShape) -> bool {
         matches!(shape, ElementShape::Vec3(ElementType::F32))
+    }
+}
+
+impl Accessible for Vec4 {
+    type Item = Vec4;
+
+    fn from_element(mut elem: Element) -> Self::Item {
+        Vec4::new(
+            elem.read_f32(),
+            elem.read_f32(),
+            elem.read_f32(),
+            elem.read_f32(),
+        )
+    }
+
+    fn zero(_shape: ElementShape) -> Self::Item {
+        Vec4::ZERO
+    }
+
+    fn validate_accessor(shape: ElementShape) -> bool {
+        matches!(shape, ElementShape::Vec4(ElementType::F32))
     }
 }
 

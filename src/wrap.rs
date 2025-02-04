@@ -20,7 +20,7 @@ use std::sync::OnceLock;
 
 pub use accessor::{Accessor, ElementShape, ElementType, Indices, Values};
 pub use animation::Animation;
-use bevy::utils::HashMap;
+use bevy::{core::Name, utils::HashMap};
 pub use buffer::{Buffer, View};
 pub use camera::Camera;
 #[cfg(feature = "gltf_lights")]
@@ -53,7 +53,7 @@ pub struct Document<'a> {
 pub(crate) struct DocInner {
     pub(crate) doc: gltf::Document,
     pub(crate) cache: Cache,
-    pub(crate) paths: OnceLock<HashMap<usize, Vec<String>>>,
+    pub(crate) paths: OnceLock<HashMap<usize, (usize, Vec<Name>)>>,
 }
 
 impl<'a> Document<'a> {
@@ -143,7 +143,7 @@ impl<'a> Document<'a> {
     }
 
     /// Helper function to compute and cache all the node-paths in the glTF file
-    pub(crate) fn node_paths(&self) -> &'a HashMap<usize, Vec<String>> {
+    pub(crate) fn node_paths(&self) -> &'a HashMap<usize, (usize, Vec<Name>)> {
         self.inner.paths.get_or_init(|| {
             use scene::traversal::{DepthFirst, Traversal};
 
@@ -160,22 +160,23 @@ impl<'a> Document<'a> {
 
             // Construct all the node paths in reverse order
             for node in DepthFirst::new(*self, roots, ()) {
-                let name = node
-                    .name()
-                    .map(String::from)
-                    .unwrap_or_else(|| format!("Node{}", node.index()));
+                let name = Name::new(
+                    node.name()
+                        .map(String::from)
+                        .unwrap_or_else(|| format!("Node{}", node.index())),
+                );
 
                 // Insert self into map
-                paths.insert(node.index(), vec![name.clone()]);
+                paths.insert(node.index(), (0, vec![name.clone()]));
 
                 // Add our name to all children
                 for child in node.children() {
-                    paths.get_mut(&child.index()).unwrap().push(name.clone());
+                    paths.get_mut(&child.index()).unwrap().1.push(name.clone());
                 }
             }
 
             // Reverse all the path ordering
-            paths.values_mut().for_each(|path| path.reverse());
+            paths.values_mut().for_each(|path| path.1.reverse());
 
             paths
         })
@@ -250,7 +251,7 @@ pub mod iter {
         }
     }
 
-    impl<'a> ExactSizeIterator for Primitives<'a> {
+    impl ExactSizeIterator for Primitives<'_> {
         fn len(&self) -> usize {
             self.1.len()
         }

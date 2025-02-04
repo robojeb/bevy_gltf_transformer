@@ -6,17 +6,36 @@ use super::{Document, View};
 use crate::{error::Result, util::data_uri::DataUri};
 use bevy::{
     asset::{AssetPath, LoadContext},
-    render::{
-        render_asset::RenderAssetUsages,
-        render_resource::TextureFormat,
-        texture::{
-            CompressedImageFormats, Image as BevyImage, ImageAddressMode, ImageFilterMode,
-            ImageSampler, ImageSamplerDescriptor, ImageType,
-        },
+    image::{
+        CompressedImageFormats, Image as BevyImage, ImageAddressMode, ImageFilterMode,
+        ImageSampler, ImageSamplerDescriptor, ImageType,
     },
+    render::{render_asset::RenderAssetUsages, render_resource::TextureFormat},
 };
 use gltf::texture::{MagFilter, MinFilter};
 use serde_json::{value::RawValue, Value};
+
+macro_rules! magic_check {
+    (($mime_type:ident, $buffer:ident) =>$($feature:literal, $magic:expr, $fmt:expr, $err:literal;)*) => {
+        if let Some($mime_type) = $mime_type {
+            ImageType::MimeType($mime_type)
+        } $(
+            else if $buffer.starts_with($magic) {
+                #[cfg(feature = $feature)]
+                {
+                    ImageType::Format($fmt)
+                }
+                #[cfg(not(feature = $feature))]
+                {
+                    panic!($err)
+                }
+            }
+        )*
+        else {
+            panic!("Could not identify image type.")
+        }
+    };
+}
 
 /// A raw glTF image. This contains pixel data but no information on texture
 /// sampler settings
@@ -85,7 +104,7 @@ impl<'a> Image<'a> {
                 let data = view.load(ctx).await?;
 
                 BevyImage::from_buffer(
-                    #[cfg(all(debug_assertions, feature = "bevy/dds"))]
+                    #[cfg(all(debug_assertions, feature = "dds"))]
                     format!("Image({}, {:?})", self.index, settings),
                     data,
                     ImageType::MimeType(mime_type),
@@ -96,8 +115,15 @@ impl<'a> Image<'a> {
                 )?
             }
             Source::UriEncoded { uri, mime_type } => {
+                // NOTE: Magic numbers are not guarded under features so that
+                // the proper error messages can be reported to the user.
                 const PNG_MAGIC: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
                 const JPEG_MAGIC: &[u8] = &[0xFF, 0xD8, 0xFF];
+                const QOI_MAGIC: &[u8] = b"qoif";
+                const EXR_MAGIC: &[u8] = &[0x76, 0x2F, 0x31, 0x01];
+                const GIF_MAGIC_A: &[u8] = b"GIF87a";
+                const GIF_MAGIC_B: &[u8] = b"GIF89a";
+
                 let uri = percent_encoding::percent_decode_str(uri)
                     .decode_utf8()
                     .expect(super::URI_ERROR);
@@ -109,18 +135,33 @@ impl<'a> Image<'a> {
                 };
 
                 // Try to get the MIME Type
-                let image_type = if let Some(mime_type) = mime_type {
-                    ImageType::MimeType(mime_type)
-                } else if buffer_bytes.starts_with(PNG_MAGIC) {
-                    ImageType::Format(bevy::render::texture::ImageFormat::Png)
-                } else if buffer_bytes.starts_with(JPEG_MAGIC) {
-                    ImageType::Format(bevy::render::texture::ImageFormat::Jpeg)
-                } else {
-                    panic!("Could not identify image type")
-                };
+                let image_type = magic_check!((mime_type, buffer_bytes) =>
+                    "png", PNG_MAGIC, bevy::image::ImageFormat::Png, "PNG loading requires the `png` feature.";
+                    "jpeg", JPEG_MAGIC, bevy::image::ImageFormat::Jpeg, "JPEG loading requires the `jpeg` feature.";
+                    "qoi", QOI_MAGIC, bevy::image::ImageFormat::Qoi, "QOI loading requires the `qoi` feature.";
+                    "exr", EXR_MAGIC, bevy::image::ImageFormat::OpenExr, "OpenEXR loading requires the `exr` feature.";
+                    "gif", GIF_MAGIC_A, bevy::image::ImageFormat::Gif, "Gif loading requires the `gif` feature.";
+                    "gif", GIF_MAGIC_B, bevy::image::ImageFormat::Gif, "Gif loading requires the `gif` feature.";
+                    "ff", b"farbfeld", bevy::image::ImageFormat::Farbfeld, "Farbfeld loading requires the `ff` feature.";
+                    // BMP file magic numbers
+                    "bmp", b"BM", bevy::image::ImageFormat::Bmp, "Bmp loading requires the `bmp` feature";
+                    "bmp", b"BA", bevy::image::ImageFormat::Bmp, "Bmp loading requires the `bmp` feature";
+                    "bmp", b"CI", bevy::image::ImageFormat::Bmp, "Bmp loading requires the `bmp` feature";
+                    "bmp", b"CP", bevy::image::ImageFormat::Bmp, "Bmp loading requires the `bmp` feature";
+                    "bmp", b"IC", bevy::image::ImageFormat::Bmp, "Bmp loading requires the `bmp` feature";
+                    "bmp", b"PT", bevy::image::ImageFormat::Bmp, "Bmp loading requires the `bmp` feature";
+                    // Several Netbpm types
+                    "pnm", b"P1", bevy::image::ImageFormat::Pnm, "PBM loading requires the `pnm` feature.";
+                    "pnm", b"P4", bevy::image::ImageFormat::Pnm, "PBM loading requires the `pnm` feature.";
+                    "pnm", b"P2", bevy::image::ImageFormat::Pnm, "PGM loading requires the `pnm` feature.";
+                    "pnm", b"P5", bevy::image::ImageFormat::Pnm, "PGM loading requires the `pnm` feature.";
+                    "pnm", b"P3", bevy::image::ImageFormat::Pnm, "PPM loading requires the `pnm` feature.";
+                    "pnm", b"P6", bevy::image::ImageFormat::Pnm, "PPM loading requires the `pnm` feature.";
+                    // TODO:   Basis, HDR, ICO, KTX2, TGA, TIFF, Webp
+                );
 
                 BevyImage::from_buffer(
-                    #[cfg(all(debug_assertions, feature = "bevy/dds"))]
+                    #[cfg(all(debug_assertions, feature = "dds"))]
                     format!("Image({}, {:?})", self.index, settings),
                     &buffer_bytes,
                     image_type,
@@ -133,8 +174,13 @@ impl<'a> Image<'a> {
             Source::ExternalPath { uri, .. } => {
                 let path = PathBuf::from(uri);
                 let asset_path = AssetPath::from(path);
-                let loaded = ctx.load_direct(asset_path).await?;
-                let mut loaded: BevyImage = loaded.take().unwrap();
+
+                let mut loaded = ctx
+                    .loader()
+                    .immediate()
+                    .load::<BevyImage>(asset_path)
+                    .await?
+                    .take();
 
                 // Apply our settings
                 loaded.asset_usage = settings.asset_usage;

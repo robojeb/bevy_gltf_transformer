@@ -1,7 +1,7 @@
 //! glTF asset loading error type
 use bevy::{
     asset::{AssetLoadError, ReadAssetBytesError},
-    render::texture::TextureError,
+    image::TextureError,
 };
 use gltf::{
     accessor::{DataType, Dimensions},
@@ -27,12 +27,18 @@ pub enum Error {
     /// Binary blob is missing.
     #[error("binary blob is missing")]
     MissingBlob,
+    /// Missing keyframe timestamps.
+    #[error("missing keyframe timestamps")]
+    MissingKeyframeTimestamps,
     /// Decoding the base64 mesh data failed.
     #[error("failed to decode base64 mesh data")]
     Base64Decode(#[from] base64::DecodeError),
     /// Unsupported buffer format.
     #[error("unsupported buffer format")]
     BufferFormatUnsupported,
+    /// Unsupported accessor type.
+    #[error("requested accessor mode was unsupported")]
+    UnsupportedAccessor,
     /// Invalid image mime type.
     #[error("invalid image mime type: {0}")]
     InvalidImageMimeType(String),
@@ -74,4 +80,7 @@ pub enum Error {
     /// have Position, Normal, or Tangent information
     #[error("could not determine primitive vertex count")]
     PrimitiveVertexCount,
+    /// Could not construct the requested animation curve type
+    #[error("invalid animation curve parameters")]
+    InvalidAnimationCurve,
 }

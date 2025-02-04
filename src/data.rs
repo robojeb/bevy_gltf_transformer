@@ -83,6 +83,9 @@ where
     }
 
     /// The number of elements in this accessor
+    ///
+    /// *Note:* This is called `count` to mirror the name of the field in the
+    /// GLTF metadata for the accessor.
     pub fn count(&self) -> usize {
         each!(self.count())
     }
@@ -114,7 +117,7 @@ pub enum DataIter<'a, T: Accessible> {
     Sparse(SparseDataIter<'a, T>),
 }
 
-impl<'a, T> Iterator for DataIter<'a, T>
+impl<T> Iterator for DataIter<'_, T>
 where
     T: Accessible,
 {
@@ -129,7 +132,7 @@ where
     }
 }
 
-impl<'a, T> ExactSizeIterator for DataIter<'a, T>
+impl<T> ExactSizeIterator for DataIter<'_, T>
 where
     T: Accessible,
 {

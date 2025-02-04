@@ -9,17 +9,16 @@ use bevy::{
         entity::Entity,
         world::{FromWorld, World},
     },
-    hierarchy::{BuildWorldChildren, Children},
+    hierarchy::{BuildChildren, Children},
     log::warn,
-    render::view::VisibilityBundle,
+    render::view::Visibility,
     scene::Scene as BevyScene,
     tasks::futures_lite::prelude::Future,
-    transform::TransformBundle,
     utils::hashbrown::HashMap,
 };
 
 use crate::{
-    wrap::{scene::traversal::DepthFirst, Material, Node, Primitive, Scene},
+    wrap::{scene::traversal::FilteredDepthFirst, Material, Mesh, Node, Primitive, Scene},
     GltfTransformLoader, GltfTransformer,
 };
 
@@ -66,16 +65,29 @@ pub trait SimpleGltfTransformer: Send + Sync + 'static {
     /// Optionally process a default material for primitives which do not
     /// have a recorded material.
     ///
-    /// The provided [Material] contains glTF supplied default properties.
+    /// This is useful for debugging such as producing a vibrant pink material
+    /// for missing/unassigned materials.
+    ///
+    /// The provided [Material] contains glTF supplied default material
+    /// properties.
     ///
     /// If no material is returned, the associated [gltf::GltfPrimitive] will
     /// have no `material` specified and may not render in any loaded scenes.
+    ///
+    /// ### Default Behavior
+    /// By default this function will call [SimpleGltfTransformer::process_material]
+    /// on the default GLTF material parameters.
     fn default_material<'a>(
         &'a self,
         ctx: &'a mut LoadContext,
         settings: &'a Self::LoadSettings,
         material: Material<'a>,
-    ) -> impl Future<Output = Result<Option<Self::Material>, Self::Error>> + Send;
+    ) -> impl Future<Output = Result<Option<Self::Material>, Self::Error>> + Send {
+        async {
+            let mat = self.process_material(ctx, settings, material).await?;
+            Ok(Some(mat))
+        }
+    }
 
     /// Process a material node and produce the output material type
     fn process_material<'a>(
@@ -85,21 +97,29 @@ pub trait SimpleGltfTransformer: Send + Sync + 'static {
         material: Material<'a>,
     ) -> impl Future<Output = Result<Self::Material, Self::Error>> + Send;
 
-    /// Process a primitive and produce the output mesh type
+    /// Process a primitive for the given [Mesh]
+    ///
+    /// This can filter primitives by returning [None] otherwise this must
+    /// return the associated [SimpleGltfTransformer::Mesh] type.
     fn process_primitive<'a>(
         &'a self,
         ctx: &'a mut LoadContext<'_>,
         settings: &'a Self::LoadSettings,
+        mesh: Mesh<'a>,
         primitive: Primitive<'a>,
-    ) -> impl Future<Output = Result<Self::Mesh, Self::Error>> + Send;
+    ) -> impl Future<Output = Result<Option<Self::Mesh>, Self::Error>> + Send;
 
-    /// Optionally filters out [Node]s from a [Scene] tree
+    /// Optionally filters out [Nodes](Node) from a [Scene] tree
     ///
-    /// By default this returns `true` for all [Node]s so they will appear in
-    /// the [Scene] tree.
-    fn node_filter<'a>(&'a self, scene: Scene<'a>, node: Node<'a>) -> bool {
-        let _use = (scene, node);
-        false
+    /// For any [Node] that this function return's `false`, that node and
+    /// all of its children will be pruned from the [Scene].
+    ///
+    /// ### Default Behavior
+    /// By default this will return `true` for all nodes.
+    fn node_filter(&self, scene: Scene, node: Node) -> bool {
+        // Squash lint warnings without changing api names
+        let _ = (scene, node);
+        true
     }
 
     /// Returns a list of extensions supported by this AssetLoader, without the preceding dot.
@@ -123,6 +143,24 @@ where
     type Settings = S::LoadSettings;
     type Error = S::Error;
 
+    /* Loads a [Gltf](gltf::Gltf) asset using the [SimpleGltfTransformer]
+     * processing functions.
+     *
+     * Loading takes several steps:
+     *  1. All materials are loaded with [SimpleGltfTransformer::process_material]
+     *    * Each material will determine the appropriate settings for textures that
+     *      it uses. This may lead to duplicate loading of textures. Future
+     *      implementations will provide a cache of preloaded textures.
+     *  2. All meshes are loaded and [GltfPrimitive](gltf::GltfPrimitive) assets
+     *     are created with the mesh data and associated material. If the glTF
+     *     default material is specified, the [SimpleGltfTransformer::default_material]
+     *     function will be called and the result will be cached for future use.
+     *  3. Scenes will be processed and an entity hierarchy will be constructed.
+     *    * Nodes which do not have a user specified name will have a name generated
+     *      based on their glTF index, e.g. `Node23`.
+     *  4. (Feature "animations" only) Animations will be loaded as
+     *     [AnimationClips](bevy::animation::AnimationClip).
+     */
     async fn load<'a>(
         &'a self,
         document: crate::wrap::Document<'_>,
@@ -135,6 +173,7 @@ where
          * This may cause duplicate loads of textures, perhaps there is a
          * better way to provide cached textures to the loader.
          */
+        // FIXME: Look into texture caching
         let mut materials = Vec::new();
         let mut named_materials = HashMap::new();
 
@@ -196,9 +235,12 @@ where
                     }
                 };
 
-                let prim = self
-                    .process_primitive(&mut mesh_ctx, settings, primitive)
-                    .await?;
+                let Some(prim) = self
+                    .process_primitive(&mut mesh_ctx, settings, mesh.clone(), primitive)
+                    .await?
+                else {
+                    continue;
+                };
                 let handle =
                     mesh_ctx.add_labeled_asset(format!("Mesh{index}/Primitive{prim_index}"), prim);
 
@@ -220,7 +262,29 @@ where
         }
 
         /*
-         * 3) Process Scenes
+         * 4) Process animations
+         */
+
+        #[cfg(feature = "animation")]
+        let (animations, named_animations) = {
+            let mut animations = Vec::with_capacity(document.animations().len());
+            let mut named_animations = HashMap::new();
+
+            for animation in document.animations() {
+                let clip = animation.load_animation_clip(ctx).await?;
+                let handle = ctx.add_labeled_asset(format!("Animation{}", animation.index()), clip);
+
+                if let Some(name) = animation.name() {
+                    named_animations.insert(String::from(name), handle.clone());
+                }
+                animations.push(handle);
+            }
+
+            Ok((animations, named_animations))
+        }?;
+
+        /*
+         * 4) Process Scenes
          */
         let nodes = Vec::with_capacity(document.nodes().len());
         let named_nodes = HashMap::new();
@@ -236,20 +300,18 @@ where
             // Reset the entity mapping cache to remove old root-nodes
             entity_cache.clear();
 
-            for node in scene.walk_nodes::<DepthFirst>() {
+            let filter = |s, n| self.node_filter(s, n);
+            let filtered_traversal =
+                FilteredDepthFirst::new(document, scene.nodes(), scene.clone(), &filter);
+
+            for node in filtered_traversal {
                 // Create child component ahead of time to prevent archetype moves
                 let child_component = Children::from_world(&mut scene_world);
 
                 // Spawn the entity with all the components we know for sure
                 // will be attached to this node entity.
-                let mut node_entity = scene_world.spawn((
-                    child_component,
-                    TransformBundle {
-                        local: node.transform(),
-                        ..Default::default()
-                    },
-                    VisibilityBundle::default(),
-                ));
+                let mut node_entity =
+                    scene_world.spawn((child_component, node.transform(), Visibility::default()));
 
                 // Attach children
                 for child in node.children() {
@@ -273,24 +335,6 @@ where
             }
             scenes.push(handle);
         }
-
-        #[cfg(feature = "animation")]
-        let (animations, named_animations) = {
-            let mut animations = Vec::with_capacity(document.animations().len());
-            let mut named_animations = HashMap::new();
-
-            for animation in document.animations() {
-                let clip = animation.load_animation_clip(ctx).await?;
-                let handle = ctx.add_labeled_asset(format!("Animation{}", animation.index()), clip);
-
-                if let Some(name) = animation.name() {
-                    named_animations.insert(String::from(name), handle.clone());
-                }
-                animations.push(handle);
-            }
-
-            Ok((animations, named_animations))
-        }?;
 
         Ok(gltf::Gltf {
             default_scene: document

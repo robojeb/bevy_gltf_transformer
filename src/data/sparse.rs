@@ -57,6 +57,9 @@ impl<'a, T> SparseData<'a, T> {
     }
 
     /// The number of elements in this accessor
+    ///
+    /// *Note:* This is called `count` to mirror the name of the field in the
+    /// GLTF metadata for the accessor.
     pub fn count(&self) -> usize {
         self.meta.count
     }
@@ -146,7 +149,7 @@ pub struct SparseDataIter<'a, T: Accessible> {
     base: Option<DenseDataIter<'a, T>>,
 }
 
-impl<'a, T> Iterator for SparseDataIter<'a, T>
+impl<T> Iterator for SparseDataIter<'_, T>
 where
     T: Accessible,
 {
@@ -177,7 +180,7 @@ where
     }
 }
 
-impl<'a, T> ExactSizeIterator for SparseDataIter<'a, T>
+impl<T> ExactSizeIterator for SparseDataIter<'_, T>
 where
     T: Accessible,
 {
@@ -263,7 +266,7 @@ struct IndexIter<'a> {
     indices: IndexData<'a>,
 }
 
-impl<'a> Iterator for IndexIter<'a> {
+impl Iterator for IndexIter<'_> {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -105,7 +105,8 @@ mod util;
 pub mod wrap;
 
 use bevy::{
-    asset::{AssetLoader, AsyncReadExt, LoadContext},
+    asset::{AssetLoader, LoadContext},
+    core::Name,
     utils::HashMap,
 };
 use std::{borrow::Cow, future::Future, sync::OnceLock};
@@ -154,70 +155,69 @@ impl<T: GltfTransformer> AssetLoader for GltfTransformLoader<T> {
     type Error = T::Error;
     type Settings = T::Settings;
 
-    fn load<'a>(
-        &'a self,
-        reader: &'a mut bevy::asset::io::Reader,
-        settings: &'a Self::Settings,
-        load_context: &'a mut bevy::asset::LoadContext<'_>,
-    ) -> bevy::utils::BoxedFuture<'a, Result<Self::Asset, Self::Error>> {
-        Box::pin(load_gltf(&self.0, reader, settings, load_context))
-    }
-
     fn extensions(&self) -> &[&str] {
         <T as GltfTransformer>::extensions(&self.0)
     }
-}
 
-async fn load_gltf<'a, T: GltfTransformer>(
-    t: &'a T,
-    reader: &'a mut bevy::asset::io::Reader<'_>,
-    settings: &'a T::Settings,
-    load_context: &'a mut bevy::asset::LoadContext<'_>,
-) -> Result<T::Asset, T::Error> {
-    let mut buffer = Vec::new();
-    reader.read_to_end(&mut buffer).await.unwrap();
-    let buffer = buffer.into_boxed_slice();
+    async fn load(
+        &self,
+        reader: &mut dyn bevy::asset::io::Reader,
+        settings: &Self::Settings,
+        load_context: &mut LoadContext<'_>,
+    ) -> Result<Self::Asset, Self::Error> {
+        let mut buffer = Vec::new();
+        reader.read_to_end(&mut buffer).await.unwrap();
+        let buffer = buffer.into_boxed_slice();
 
-    let (document, blob) = match gltf::Glb::from_slice(&buffer) {
-        Ok(glb) => {
-            let document =
-                gltf::Document::from_json(gltf::json::Root::from_slice(&glb.json).unwrap())
-                    .unwrap();
-            (document, glb.bin)
-        }
-        Err(_) => {
-            let gltf = gltf::Gltf::from_slice(&buffer).unwrap();
-            (
-                gltf.document,
-                None, /* Always none when loading text GLTF */
-            )
-        }
-    };
-
-    // Buffer cache takes ownership of the whole document
-    let cache = if let Some(blob) = blob {
-        match blob {
-            Cow::Owned(o) => Cache::new(OwningSlice::new_complete(o.into_boxed_slice())),
-            Cow::Borrowed(s) => {
-                let offset = OwningSlice::find_offset(&buffer, s)
-                    .expect("Borrowed glTF data chunk was not part of the original buffer, or exceeded the buffer length");
-                let slice_len = s.len();
-                Cache::new(unsafe { OwningSlice::new(buffer, offset, slice_len) })
+        let (document, blob) = match gltf::Glb::from_slice(&buffer) {
+            Ok(glb) => {
+                let document =
+                    gltf::Document::from_json(gltf::json::Root::from_slice(&glb.json).unwrap())
+                        .unwrap();
+                (document, glb.bin)
             }
-        }
-    } else {
-        util::Cache::empty()
-    };
+            Err(_) => {
+                let gltf = gltf::Gltf::from_slice(&buffer).unwrap();
+                (
+                    gltf.document,
+                    None, /* Always none when loading text GLTF */
+                )
+            }
+        };
 
-    let paths: OnceLock<HashMap<usize, Vec<String>>> = OnceLock::new();
+        // Buffer cache takes ownership of the whole document
+        let cache = if let Some(blob) = blob {
+            match blob {
+                Cow::Owned(o) => Cache::new(OwningSlice::new_complete(o.into_boxed_slice())),
+                Cow::Borrowed(s) => {
+                    let offset = OwningSlice::find_offset(&buffer, s)
+                    .expect("Borrowed glTF data chunk was not part of the original buffer, or exceeded the buffer length");
+                    let slice_len = s.len();
+                    Cache::new(unsafe { OwningSlice::new(buffer, offset, slice_len) })
+                }
+            }
+        } else {
+            util::Cache::empty()
+        };
 
-    let inner = wrap::DocInner {
-        doc: document,
-        cache,
-        paths,
-    };
+        let paths: OnceLock<HashMap<usize, (usize, Vec<Name>)>> = OnceLock::new();
 
-    let doc = wrap::Document { inner: &inner };
+        let inner = wrap::DocInner {
+            doc: document,
+            cache,
+            paths,
+        };
 
-    T::load(t, doc, settings, load_context).await
+        let doc = wrap::Document { inner: &inner };
+
+        T::load(&self.0, doc, settings, load_context).await
+    }
 }
+
+// async fn load_gltf<T: GltfTransformer>(
+//     t: &T,
+//     reader: &mut dyn bevy::asset::io::Reader,
+//     settings: &T::Settings,
+//     load_context: &mut bevy::asset::LoadContext<'_>,
+// ) -> Result<T::Asset, T::Error> {
+// }

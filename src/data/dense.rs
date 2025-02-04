@@ -19,13 +19,13 @@ pub struct DenseData<'a, T> {
     _element: PhantomData<T>,
 }
 
-impl<'a, T> Clone for DenseData<'a, T> {
+impl<T> Clone for DenseData<'_, T> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, T> Copy for DenseData<'a, T> {}
+impl<T> Copy for DenseData<'_, T> {}
 
 impl<'a, T> DenseData<'a, T> {
     /// Create a new [DenseData] from a view and provided meta-data
@@ -67,6 +67,9 @@ impl<'a, T> DenseData<'a, T> {
     }
 
     /// The number of elements in this accessor
+    ///
+    /// *Note:* This is called `count` to mirror the name of the field in the
+    /// GLTF metadata for the accessor.
     pub fn count(&self) -> usize {
         self.meta.count
     }
@@ -162,7 +165,7 @@ impl<'a, T> DenseDataIter<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for DenseDataIter<'a, T>
+impl<T> Iterator for DenseDataIter<'_, T>
 where
     T: Accessible,
 {
@@ -183,7 +186,7 @@ where
     }
 }
 
-impl<'a, T> ExactSizeIterator for DenseDataIter<'a, T>
+impl<T> ExactSizeIterator for DenseDataIter<'_, T>
 where
     T: Accessible,
 {

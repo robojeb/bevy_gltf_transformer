@@ -69,4 +69,4 @@ impl<'a> Iterator for Joints<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for Joints<'a> {}
+impl ExactSizeIterator for Joints<'_> {}

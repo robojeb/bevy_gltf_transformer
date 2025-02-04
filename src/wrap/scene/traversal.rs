@@ -1,5 +1,5 @@
 //! Algorithms for traversing a [Node] tree for a [Scene] or [Node]
-use super::Node;
+use super::{Node, Scene};
 use crate::wrap::Document;
 
 /// Defines a strategy to traverse over a [Node] tree
@@ -51,7 +51,7 @@ impl<'a> Iterator for DepthFirst<'a> {
             let node = self.doc.get_node(*node_idx).unwrap();
 
             // Finished iterating over this Node's children so return it now
-            if *child_offset == node.children().len() {
+            if *child_offset >= node.children().len() {
                 self.stack.pop();
                 return Some(node);
             }
@@ -64,6 +64,63 @@ impl<'a> Iterator for DepthFirst<'a> {
 
             // Append the next child
             self.stack.push((child, 0))
+        }
+
+        None
+    }
+}
+
+pub(crate) struct FilteredDepthFirst<'a, 'f> {
+    doc: Document<'a>,
+    filter: &'f dyn Fn(Scene<'a>, Node<'a>) -> bool,
+    scene: Scene<'a>,
+    stack: Vec<(usize, usize)>,
+}
+
+impl<'a, 'f> FilteredDepthFirst<'a, 'f> {
+    pub(crate) fn new(
+        doc: Document<'a>,
+        roots: impl Iterator<Item = Node<'a>>,
+        scene: Scene<'a>,
+        filter: &'f dyn Fn(Scene<'a>, Node<'a>) -> bool,
+    ) -> Self {
+        Self {
+            doc,
+            scene,
+            filter,
+            stack: roots.map(|node| (node.index(), 0)).collect(),
+        }
+    }
+}
+
+impl<'a> Iterator for FilteredDepthFirst<'a, '_> {
+    type Item = Node<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        'descend: while let Some((node_idx, child_offset)) = self.stack.last_mut() {
+            let node = self.doc.get_node(*node_idx).unwrap();
+
+            while *child_offset < node.children().len() {
+                // Get the next child
+                let child_node = node.children().nth(*child_offset).unwrap();
+                let child = child_node.index();
+
+                // Increment child counter
+                *child_offset += 1;
+
+                if (self.filter)(self.scene.clone(), child_node) {
+                    // Append the next child
+                    self.stack.push((child, 0));
+                    // Descend into this child
+                    continue 'descend;
+                }
+            }
+
+            // Finished iterating over this Node's children so return it now
+            if *child_offset >= node.children().len() {
+                self.stack.pop();
+                return Some(node);
+            }
         }
 
         None

@@ -9,7 +9,7 @@ use crate::{
 };
 use bevy::{
     asset::LoadContext,
-    math::{bounding::Aabb3d, f32::Vec3},
+    math::{bounding::Aabb3d, f32::Vec3, Vec3A},
     render::{
         mesh::{
             morph::{MorphAttributes, MorphTargetImage},
@@ -46,8 +46,8 @@ impl<'a> Primitive<'a> {
     pub fn bounding_box(&self) -> Aabb3d {
         let gltf::mesh::BoundingBox { min, max } = self.raw.bounding_box();
         Aabb3d {
-            min: Vec3::from(min),
-            max: Vec3::from(max),
+            min: Vec3A::from(min),
+            max: Vec3A::from(max),
         }
     }
 
@@ -245,6 +245,7 @@ impl<'a> Primitive<'a> {
 ///
 /// This may consist of multiple [Primitives] each with a potentially different
 /// [Material].
+#[derive(Clone)]
 pub struct Mesh<'a> {
     _doc: Document<'a>,
     raw: gltf::Mesh<'a>,
@@ -283,12 +284,12 @@ impl<'a> Mesh<'a> {
         asset_usage: RenderAssetUsages,
     ) -> Result<BevyScene> {
         use bevy::{
-            pbr::{MaterialMeshBundle, StandardMaterial},
-            render::color::Color,
+            color::Color,
+            pbr::{MeshMaterial3d, StandardMaterial},
+            render::mesh::Mesh3d,
         };
 
-        let mut world = World::new();
-
+        let mut batch = Vec::with_capacity(self.primitives().len());
         for prim in self.primitives() {
             let mesh = prim.as_mesh(ctx, asset_usage).await?;
             let mesh = ctx.add_labeled_asset(
@@ -303,12 +304,11 @@ impl<'a> Mesh<'a> {
                 material,
             );
 
-            world.spawn(MaterialMeshBundle {
-                mesh,
-                material,
-                ..Default::default()
-            });
+            batch.push((Mesh3d(mesh), MeshMaterial3d(material)));
         }
+
+        let mut world = World::new();
+        world.spawn_batch(batch);
 
         Ok(BevyScene::new(world))
     }
@@ -413,7 +413,7 @@ pub struct MorphAttributeIter<'a> {
     tangents: Option<DataIter<'a, Vec3>>,
 }
 
-impl<'a> Iterator for MorphAttributeIter<'a> {
+impl Iterator for MorphAttributeIter<'_> {
     type Item = MorphAttributes;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -700,7 +700,7 @@ pub mod iter {
         }
     }
 
-    impl<'a> ExactSizeIterator for MorphTargets<'a> {
+    impl ExactSizeIterator for MorphTargets<'_> {
         fn len(&self) -> usize {
             self.raw.len()
         }

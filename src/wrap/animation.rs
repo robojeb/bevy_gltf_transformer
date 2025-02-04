@@ -1,16 +1,22 @@
 //! Structures for glTF animation
 
-use std::borrow::Cow;
-
 use super::{Accessor, Document, Node};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use bevy::{
-    animation::{AnimationClip, EntityPath, Interpolation, Keyframes, VariableCurve},
+    animation::{
+        animated_field,
+        gltf_curves::{CubicKeyframeCurve, CubicRotationCurve, SteppedKeyframeCurve},
+        prelude::*,
+        AnimationClip, AnimationTargetId, VariableCurve,
+    },
     asset::LoadContext,
-    core::Name,
-    math::{Quat, Vec3},
+    math::{
+        curve::{ConstantCurve, Interval, UnevenSampleAutoCurve},
+        Quat, Vec3, Vec4,
+    },
+    transform::components::Transform,
 };
-use gltf::animation::Property;
+use gltf::animation::{Interpolation, Property};
 use iter::{Channels, Samplers};
 
 /// A glTF animation description
@@ -51,22 +57,44 @@ impl<'a> Animation<'a> {
         }
     }
 
-    /// Loads this animation as a bevy [AnimationClip]
-    pub async fn load_animation_clip(&self, ctx: &mut LoadContext<'_>) -> Result<AnimationClip> {
+    /// Loads this animation as a bevy [AnimationClip] potentially remapping
+    /// the [Channel]s
+    ///
+    /// The `target_map` parameter will be called for each Animation [Channel]
+    /// and should return an appropriate [AnimationTargetId] or [None].
+    /// If [None] is returned the [Channel] will not be included in the
+    /// [AnimationClip].
+    pub async fn load_animation_clip_with_targets<F>(
+        &self,
+        ctx: &mut LoadContext<'_>,
+        mut target_map: F,
+    ) -> Result<AnimationClip>
+    where
+        F: FnMut(&Channel) -> Option<AnimationTargetId>,
+    {
         let mut clip = AnimationClip::default();
 
         for channel in self.channels() {
-            let curve = channel.load_variable_curve(ctx).await?;
-            let parts = channel
-                .node()
-                .path()
-                .iter()
-                .map(|s| Name::new(Cow::Owned(s.clone())))
-                .collect();
-            clip.add_curve_to_path(EntityPath { parts }, curve);
+            // Check if this should be filtered before we spend our time loading it
+            if let Some(target_id) = target_map(&channel) {
+                let curve = channel.load_variable_curve(ctx).await?;
+                clip.add_variable_curve_to_target(target_id, curve);
+            }
         }
 
         Ok(clip)
+    }
+
+    /// Loads this animation as a bevy [AnimationClip]
+    ///
+    /// [AnimationTargetId]s will be generated from the [Node::path].
+    pub async fn load_animation_clip(&self, ctx: &mut LoadContext<'_>) -> Result<AnimationClip> {
+        self.load_animation_clip_with_targets(ctx, |channel| {
+            Some(bevy::animation::AnimationTargetId::from_names(
+                channel.node().path().iter(),
+            ))
+        })
+        .await
     }
 }
 
@@ -143,27 +171,67 @@ impl<'a> Channel<'a> {
     pub async fn load_variable_curve(&self, ctx: &mut LoadContext<'_>) -> Result<VariableCurve> {
         let sampler = self.sampler();
 
-        Ok(VariableCurve {
-            keyframe_timestamps: sampler.input().load::<f32>(ctx).await?.iter().collect(),
-            keyframes: {
-                let output = sampler.output().load_untyped(ctx).await?;
-                match self.property() {
-                    Property::Translation => {
-                        Keyframes::Translation(output.try_with_type::<Vec3>()?.iter().collect())
-                    }
-                    Property::Rotation => {
-                        Keyframes::Rotation(output.try_with_type::<Quat>()?.iter().collect())
-                    }
-                    Property::Scale => {
-                        Keyframes::Scale(output.try_with_type::<Vec3>()?.iter().collect())
-                    }
-                    Property::MorphTargetWeights => {
-                        Keyframes::Weights(output.try_with_type::<f32>()?.iter().collect())
+        // Check that the keyframes are valid
+        let keyframes = sampler.input();
+        if keyframes.is_sparse() {
+            bevy::log::warn!("Sparse accessor not supported for animation sampler input");
+            return Err(Error::UnsupportedAccessor);
+        }
+        let keyframes = keyframes.load::<f32>(ctx).await?;
+        if keyframes.count() == 0 {
+            bevy::log::warn!("Tried to load animation with no keyframe timestamps");
+            return Err(Error::MissingKeyframeTimestamps);
+        }
+
+        let output = self.sampler().output().load_untyped(ctx).await?;
+
+        macro_rules! make_curve {
+            ($prop:expr,  $t:ty $(,$r:ident)?) => {{
+                let values = output.try_with_type::<$t>()?;
+                if keyframes.count() == 1 {
+                    VariableCurve::new(AnimatableCurve::new(
+                        $prop,
+                        ConstantCurve::new(Interval::EVERYWHERE, values.get(0).unwrap()),
+                    ))
+                } else {
+                    match self.sampler().interpolation() {
+                        Interpolation::Linear => {
+
+                            VariableCurve::new(AnimatableCurve::new(
+                                $prop,
+                                UnevenSampleAutoCurve::new(keyframes.iter().zip(values.iter()))
+                                .map_err(|_| Error::InvalidAnimationCurve)?
+                                ))
+                        },
+                        Interpolation::CubicSpline => VariableCurve::new(AnimatableCurve::new(
+                            $prop,
+                            make_curve!(@cubic $($r)? keyframes.iter(), values.iter())
+                                .map_err(|_| Error::InvalidAnimationCurve)?,
+                        )),
+                        Interpolation::Step => VariableCurve::new(AnimatableCurve::new(
+                            $prop,
+                            SteppedKeyframeCurve::new(keyframes.iter().zip(values.iter())).map_err(|_| Error::InvalidAnimationCurve)?
+                        )),
                     }
                 }
-            },
-            interpolation: sampler.interpolation(),
-        })
+            }};
+
+            (@cubic rot $keyframes:expr, $values:expr) => {
+                CubicRotationCurve::new($keyframes, $values.map(Vec4::from))
+            };
+            (@cubic $keyframes:expr, $values:expr) => {
+                CubicKeyframeCurve::new($keyframes, $values)
+            };
+        }
+
+        let curve = match self.property() {
+            Property::Translation => make_curve!(animated_field!(Transform::translation), Vec3),
+            Property::Rotation => make_curve!(animated_field!(Transform::rotation), Quat, rot),
+            Property::Scale => make_curve!(animated_field!(Transform::scale), Vec3),
+            _ => todo!("Morph target weights"),
+        };
+
+        Ok(curve)
     }
 }
 
